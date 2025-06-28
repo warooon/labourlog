@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'employee_edit_controller.dart';
+import 'package:flutter/foundation.dart';
 
 class EditEmployeeView extends GetView<EmployeeEditController> {
   final Map employee;
@@ -117,10 +118,13 @@ class EditEmployeeView extends GetView<EmployeeEditController> {
 
   Widget _buildImageDisplay(bool isDark) {
     final selectedImage = controller.selectedImage.value;
+    final webImageBytes = controller.webImageBytes.value;
     final imageUrl = controller.imageUrl.value;
 
     if (selectedImage != null) {
       return Image.file(selectedImage, fit: BoxFit.cover);
+    } else if (webImageBytes != null) {
+      return Image.memory(webImageBytes, fit: BoxFit.cover);
     } else if (imageUrl.isNotEmpty) {
       return Image.network(imageUrl, fit: BoxFit.cover);
     } else {
@@ -217,7 +221,14 @@ class EditEmployeeView extends GetView<EmployeeEditController> {
   void _showImagePickerOptions(
     BuildContext context,
     EmployeeEditController controller,
-  ) {
+  ) async {
+    if (kIsWeb) {
+      // Directly pick image on web
+      await controller.pickImage();
+      return;
+    }
+
+    // Show bottom sheet only on mobile
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -227,7 +238,6 @@ class EditEmployeeView extends GetView<EmployeeEditController> {
           (_) => SafeArea(
             child: Column(
               mainAxisSize: MainAxisSize.min,
-
               children: [
                 ListTile(
                   leading: const Icon(Icons.photo_library),

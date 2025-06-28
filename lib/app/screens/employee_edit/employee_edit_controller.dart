@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
@@ -19,6 +21,7 @@ class EmployeeEditController extends GetxController {
   RxString wageType = 'daily'.obs;
   RxString category = 'labour'.obs;
   Rx<File?> selectedImage = Rx<File?>(null);
+  Rx<Uint8List?> webImageBytes = Rx<Uint8List?>(null);
   RxString imageUrl = ''.obs;
   RxBool isImageLoading = false.obs;
 
@@ -75,6 +78,8 @@ class EmployeeEditController extends GetxController {
   }
 
   Future<bool> requestStoragePermission() async {
+    if (kIsWeb) return true;
+
     if (Platform.isAndroid) {
       if (await Permission.photos.isGranted ||
           await Permission.storage.isGranted) {
@@ -96,8 +101,9 @@ class EmployeeEditController extends GetxController {
     try {
       isImageLoading.value = true;
 
-      selectedImage.value?.delete().catchError((error) => selectedImage.value!);
+      selectedImage.value?.delete().catchError((_) {});
       selectedImage.value = null;
+      webImageBytes.value = null;
 
       final hasPermission = await requestStoragePermission();
       if (!hasPermission) {
@@ -111,55 +117,62 @@ class EmployeeEditController extends GetxController {
       await Future.delayed(const Duration(milliseconds: 200));
 
       final picked = await _picker.pickImage(
-        source: ImageSource.gallery, // ✅ Only allow gallery
+        source: ImageSource.gallery,
         imageQuality: 60,
         maxWidth: 1000,
         maxHeight: 1000,
       );
 
-      if (picked != null && await File(picked.path).exists()) {
-        final cropped = await ImageCropper().cropImage(
-          sourcePath: picked.path,
-          compressQuality: 75,
-          maxWidth: 800,
-          maxHeight: 800,
-          aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
-          uiSettings: [
-            AndroidUiSettings(
-              toolbarTitle: '\nCrop Your Image', // Adds vertical spacing
-              toolbarColor: Colors.black,
-              statusBarColor: Colors.black,
-              backgroundColor: Colors.black,
-              toolbarWidgetColor: Colors.white,
-              activeControlsWidgetColor: Colors.white,
-              cropFrameColor: Colors.white,
-              cropGridColor: Colors.grey,
-              dimmedLayerColor: Colors.black54,
-              lockAspectRatio: false,
-              showCropGrid: true,
-              initAspectRatio: CropAspectRatioPreset.square,
-              hideBottomControls: false,
-            ),
-            IOSUiSettings(
-              title: 'Crop Your Image',
-              aspectRatioLockEnabled: false,
-              rotateButtonsHidden: false,
-              resetButtonHidden: false,
-            ),
-          ],
-        );
-
-        if (cropped != null && await File(cropped.path).exists()) {
-          final tempDir = await getTemporaryDirectory();
-          final tempPath =
-              '${tempDir.path}/${DateTime.now().millisecondsSinceEpoch}.jpg';
-          final tempFile = await File(cropped.path).copy(tempPath);
-
-          selectedImage.value = tempFile;
+      if (picked != null) {
+        if (kIsWeb) {
+          final bytes = await picked.readAsBytes();
+          webImageBytes.value = bytes;
           imageUrl.value = '';
-          debugPrint("Image cropped and selected: ${tempFile.path}");
+          debugPrint("Web image selected: ${bytes.length} bytes");
         } else {
-          Get.snackbar('Cancelled', 'Image cropping cancelled');
+          final cropped = await ImageCropper().cropImage(
+            sourcePath: picked.path,
+            compressQuality: 75,
+            maxWidth: 800,
+            maxHeight: 800,
+            aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
+            uiSettings: [
+              AndroidUiSettings(
+                toolbarTitle: '\nCrop Your Image',
+                toolbarColor: Colors.black,
+                statusBarColor: Colors.black,
+                backgroundColor: Colors.black,
+                toolbarWidgetColor: Colors.white,
+                activeControlsWidgetColor: Colors.white,
+                cropFrameColor: Colors.white,
+                cropGridColor: Colors.grey,
+                dimmedLayerColor: Colors.black54,
+                lockAspectRatio: false,
+                showCropGrid: true,
+                initAspectRatio: CropAspectRatioPreset.square,
+                hideBottomControls: false,
+              ),
+              IOSUiSettings(
+                title: 'Crop Your Image',
+                aspectRatioLockEnabled: false,
+                rotateButtonsHidden: false,
+                resetButtonHidden: false,
+              ),
+            ],
+          );
+
+          if (cropped != null && await File(cropped.path).exists()) {
+            final tempDir = await getTemporaryDirectory();
+            final tempPath =
+                '${tempDir.path}/${DateTime.now().millisecondsSinceEpoch}.jpg';
+            final tempFile = await File(cropped.path).copy(tempPath);
+
+            selectedImage.value = tempFile;
+            imageUrl.value = '';
+            debugPrint("Image cropped and selected: ${tempFile.path}");
+          } else {
+            Get.snackbar('Cancelled', 'Image cropping cancelled');
+          }
         }
       } else {
         Get.snackbar('Error', 'Failed to access selected image');
@@ -176,19 +189,17 @@ class EmployeeEditController extends GetxController {
     try {
       String? uploadedImageUrl = imageUrl.value;
 
-      if (selectedImage.value != null) {
-        final file = selectedImage.value!;
-        if (!await file.exists()) {
-          Get.snackbar('Error', 'Selected image file not found');
-          return;
-        }
-
+      if (selectedImage.value != null || webImageBytes.value != null) {
         final fileName =
             'employee_${DateTime.now().millisecondsSinceEpoch}.jpg';
         final path = fileName;
 
         try {
-          final bytes = await file.readAsBytes();
+          final bytes =
+              selectedImage.value != null
+                  ? await selectedImage.value!.readAsBytes()
+                  : webImageBytes.value!;
+
           debugPrint("Uploading image: ${bytes.length} bytes");
 
           await supabase.storage
@@ -256,9 +267,10 @@ class EmployeeEditController extends GetxController {
     advanceController.dispose();
     wageAmountController.dispose();
 
-    selectedImage.value?.delete().catchError(
-      (error) => selectedImage.value ?? File(''),
-    );
+    if (!kIsWeb) {
+      selectedImage.value?.delete().catchError((_) {});
+    }
+
     super.onClose();
   }
 }

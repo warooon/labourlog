@@ -138,13 +138,13 @@ class EmployeeView extends GetView<EmployeeController> {
                       final name = emp['name'] ?? '';
                       final category = emp['category'] ?? '';
                       final wageType = emp['wage_type'] ?? '';
-                      final imageUrl = emp['avatar_url'];
+                      final imageUrl = emp['photo_url'];
 
                       return Card(
                         child: ListTile(
                           onTap: () => showEmployeeDetails(emp, context),
                           leading:
-                              imageUrl != null
+                              (imageUrl != null && imageUrl.isNotEmpty)
                                   ? CircleAvatar(
                                     backgroundImage: NetworkImage(imageUrl),
                                   )

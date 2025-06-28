@@ -41,7 +41,7 @@ class DashboardController extends GetxController {
       'crossAxisCount': 2,
       'mainAxisCount': 2,
     },
-
+   
     {
       'label': 'Mark Attendance',
       'icon': Icons.how_to_reg,
@@ -50,7 +50,7 @@ class DashboardController extends GetxController {
       'mainAxisCount': 3,
       'routeName': Routes.ATTENDANCE,
     },
-    {
+ {
       'label': 'On Leave',
       'metricRx': onLeaveCountStr,
       'crossAxisCount': 2,
